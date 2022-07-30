@@ -1,5 +1,6 @@
 package com.snowplow.json
 
+import cats.Monad
 import cats.data.EitherT
 
 object JsonSchemaRegistry {
@@ -21,8 +22,24 @@ object JsonSchemaRegistry {
   type PersistJsonSchema[F[_]] = JsonSchema => EitherT[F, PersistenceError, JsonSchemaPersisted]
   type LoadJsonSchema[F[_]]    = String => EitherT[F, PersistenceError, JsonSchema]
 
-  def registerJsonSchema[F[_]](persistJsonSchema: PersistJsonSchema[F], loadJsonSchema: LoadJsonSchema[F])(
+  def registerJsonSchema[F[_]: Monad](persistJsonSchema: PersistJsonSchema[F], loadJsonSchema: LoadJsonSchema[F])(
       jsonSchema: JsonSchema
-  ): EitherT[F, RegistrationError, JsonSchemaRegistered] = ???
+  ): EitherT[F, RegistrationError, JsonSchemaRegistered] =
+    loadJsonSchema(jsonSchema.id)
+      .biflatMap(
+        {
+          case GeneralPersistenceError(error) => EitherT.leftT(GeneralRegistrationError(jsonSchema.id, error))
+          case SchemaAlreadyExists(id)        => EitherT.leftT(GeneralRegistrationError(id, "schema already exists"))
+          case SchemaNotFound(_)              =>
+            persistJsonSchema(jsonSchema)
+              .leftMap[RegistrationError] {
+                case GeneralPersistenceError(error) => GeneralRegistrationError(jsonSchema.id, error)
+                case SchemaAlreadyExists(id)        => GeneralRegistrationError(id, "schema already exists")
+                case SchemaNotFound(id)             => JsonSchemaAlreadyExists(id)
+              }
+              .map(persisted => JsonSchemaRegistered(persisted.id))
+        },
+        _ => EitherT.leftT(JsonSchemaAlreadyExists(jsonSchema.id))
+      )
 
 }
