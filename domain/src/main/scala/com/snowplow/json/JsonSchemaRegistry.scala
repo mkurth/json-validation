@@ -2,6 +2,9 @@ package com.snowplow.json
 
 import cats.Monad
 import cats.data.EitherT
+import com.github.fge.jackson.JsonLoader
+
+import scala.util.{Failure, Success, Try}
 
 object JsonSchemaRegistry {
 
@@ -26,22 +29,25 @@ object JsonSchemaRegistry {
   def registerJsonSchema[F[_]: Monad](persistJsonSchema: PersistJsonSchema[F], loadJsonSchema: LoadJsonSchema[F])(
       jsonSchema: JsonSchema
   ): EitherT[F, RegistrationError, JsonSchemaRegistered] =
-    loadJsonSchema(jsonSchema.id)
-      .biflatMap(
-        {
-          case GeneralPersistenceError(error) => EitherT.leftT(GeneralRegistrationError(jsonSchema.id, error))
-          case SchemaAlreadyExists(id)        => EitherT.leftT(GeneralRegistrationError(id, "schema already exists"))
-          case SchemaNotFound(_)              =>
-            persistJsonSchema(jsonSchema)
-              .leftMap[RegistrationError] {
-                case GeneralPersistenceError(error) => GeneralRegistrationError(jsonSchema.id, error)
-                case SchemaAlreadyExists(id)        =>
-                  ConcurrentWritesError(id, "schema already exists, probably due to concurrent requests")
-                case SchemaNotFound(id)             => JsonSchemaAlreadyExists(id)
-              }
-              .map(persisted => JsonSchemaRegistered(persisted.id))
-        },
-        _ => EitherT.leftT(JsonSchemaAlreadyExists(jsonSchema.id))
-      )
-
+    Try(JsonLoader.fromString(jsonSchema.body)) match {
+      case Failure(_) => EitherT.leftT(InvalidJson)
+      case Success(_) =>
+        loadJsonSchema(jsonSchema.id)
+          .biflatMap(
+            {
+              case GeneralPersistenceError(error) => EitherT.leftT(GeneralRegistrationError(jsonSchema.id, error))
+              case SchemaAlreadyExists(id)        => EitherT.leftT(GeneralRegistrationError(id, "schema already exists"))
+              case SchemaNotFound(_)              =>
+                persistJsonSchema(jsonSchema)
+                  .leftMap[RegistrationError] {
+                    case GeneralPersistenceError(error) => GeneralRegistrationError(jsonSchema.id, error)
+                    case SchemaAlreadyExists(id)        =>
+                      ConcurrentWritesError(id, "schema already exists, probably due to concurrent requests")
+                    case SchemaNotFound(id)             => JsonSchemaAlreadyExists(id)
+                  }
+                  .map(persisted => JsonSchemaRegistered(persisted.id))
+            },
+            _ => EitherT.leftT(JsonSchemaAlreadyExists(jsonSchema.id))
+          )
+    }
 }

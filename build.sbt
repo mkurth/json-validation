@@ -6,8 +6,9 @@ ThisBuild / scalaVersion := "2.13.8"
 lazy val domain = (project in file("domain"))
   .settings(
     name                := "json-schema-validator",
-    libraryDependencies += "org.typelevel" %% "cats-effect" % "3.3.14",
-    libraryDependencies += "org.scalatest" %% "scalatest"   % "3.2.12" % "test"
+    libraryDependencies += "org.typelevel"             %% "cats-effect"           % "3.3.14",
+    libraryDependencies += "org.scalatest"             %% "scalatest"             % "3.2.12" % "test",
+    libraryDependencies += "com.github.java-json-tools" % "json-schema-validator" % "2.2.14"
   )
 
 lazy val app = (project in file("app"))
