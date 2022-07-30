@@ -59,10 +59,23 @@ class JsonSchemaRegistryTest extends AnyFlatSpec with Matchers with GivenWhenThe
     val register                           = registerJsonSchema[Id](persistence, load) _
 
     When("registering a valid_json schema")
-    val result = register(JsonSchema("valid_json", "{}")).value
+    val Left(result) = register(JsonSchema("valid_json", "{}")).value
 
     Then("we expect a general error")
-    result shouldBe Left(GeneralRegistrationError("valid_json", "something went wrong"))
+    result shouldBe GeneralRegistrationError("valid_json", "something went wrong")
+  }
+
+  it should "return a concurrent error if an error occurred while persisting" in {
+    Given("an always failing persistence")
+    val persistence: PersistJsonSchema[Id] = schema => EitherT.leftT(SchemaAlreadyExists(schema.id))
+    val load: LoadJsonSchema[Id]           = id => EitherT.leftT(SchemaNotFound(id))
+    val register                           = registerJsonSchema[Id](persistence, load) _
+
+    When("registering a valid_json schema")
+    val Left(result) = register(JsonSchema("valid_json", "{}")).value
+
+    Then("we expect a general error")
+    result shouldBe a[ConcurrentWritesError]
   }
 
 }

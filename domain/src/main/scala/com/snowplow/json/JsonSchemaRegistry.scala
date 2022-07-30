@@ -8,6 +8,7 @@ object JsonSchemaRegistry {
   sealed trait RegistrationError
   final case class JsonSchemaAlreadyExists(id: String)                 extends RegistrationError
   final case class GeneralRegistrationError(id: String, error: String) extends RegistrationError
+  final case class ConcurrentWritesError(id: String, error: String)    extends RegistrationError
   case object InvalidJson                                              extends RegistrationError
 
   final case class JsonSchemaRegistered(id: String)
@@ -34,7 +35,8 @@ object JsonSchemaRegistry {
             persistJsonSchema(jsonSchema)
               .leftMap[RegistrationError] {
                 case GeneralPersistenceError(error) => GeneralRegistrationError(jsonSchema.id, error)
-                case SchemaAlreadyExists(id)        => GeneralRegistrationError(id, "schema already exists")
+                case SchemaAlreadyExists(id)        =>
+                  ConcurrentWritesError(id, "schema already exists, probably due to concurrent requests")
                 case SchemaNotFound(id)             => JsonSchemaAlreadyExists(id)
               }
               .map(persisted => JsonSchemaRegistered(persisted.id))
