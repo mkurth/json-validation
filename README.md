@@ -48,3 +48,5 @@ their own error return types.
 here and not use cases
 * JsonSchemaRegistry looks a bit messy with the Try and the staircased EitherT
 * no real integration tests
+* no separate types for schemaId and the incoming data, should be more typesafe, but I didn't want to spend too much 
+time on that 
