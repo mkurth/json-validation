@@ -7,6 +7,7 @@ import com.snowplow.json.JsonSchemaValidation.{GeneralValidationError, JsonDoesN
 import com.snowplow.json.JsonSchemaValidationApi._
 import dev.profunktor.redis4cats.{Redis, RedisCommands}
 import dev.profunktor.redis4cats.effect.Log.Stdout.instance
+import io.circe.parser
 import org.http4s.{Headers, MediaType, Response, Status}
 import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.headers.`Content-Type`
@@ -76,7 +77,14 @@ object HttpApp extends IOApp {
     val action = "validateDocument"
     JsonSchemaValidation.validateJsonSchema(loadSchema)(schemaId, body).value.map {
       case Left(JsonSchemaValidation.InvalidJson)  => Left(UnsupportedMediaTypeResponse(action, schemaId))
-      case Left(JsonDoesNotMatchSchema(_, errors)) => Left(BadRequestResponse(action, schemaId, errors.mkString("\n")))
+      case Left(JsonDoesNotMatchSchema(_, errors)) =>
+        Left(
+          BadRequestResponse(
+            action,
+            schemaId,
+            errors.map(parser.parse).collect { case Right(value) => value }
+          )
+        )
       case Left(SchemaDoesNotExist(_))             => Left(NotFoundResponse(action, schemaId))
       case Left(GeneralValidationError(_, _))      => Left(InternalServerErrorResponse(action, schemaId))
       case Right(_)                                => Right(SuccessApiResponse(action, schemaId))

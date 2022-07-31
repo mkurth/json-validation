@@ -61,7 +61,7 @@ object JsonSchemaValidation {
 
   private def handleValidationResult(id: String, validationResult: ProcessingReport) =
     if (validationResult.isSuccess) Right(ValidJsonSchema(id))
-    else Left(JsonDoesNotMatchSchema(id, validationResult.iterator().asScala.map(_.getMessage).toList))
+    else Left(JsonDoesNotMatchSchema(id, validationResult.iterator().asScala.map(_.asJson().toString).toList))
 
   private def tryOrEither[A](f: () => A, onError: Throwable => ValidationError): Either[ValidationError, A] =
     Try(f()).toEither.left.map(onError)
