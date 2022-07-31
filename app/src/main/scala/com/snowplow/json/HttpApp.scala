@@ -5,6 +5,8 @@ import cats.effect._
 import com.snowplow.json.JsonSchemaRegistry._
 import com.snowplow.json.JsonSchemaValidation.{GeneralValidationError, JsonDoesNotMatchSchema, SchemaDoesNotExist}
 import com.snowplow.json.JsonSchemaValidationApi._
+import dev.profunktor.redis4cats.{Redis, RedisCommands}
+import dev.profunktor.redis4cats.effect.Log.Stdout.instance
 import org.http4s.{Headers, MediaType, Response, Status}
 import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.headers.`Content-Type`
@@ -18,33 +20,44 @@ object HttpApp extends IOApp {
 
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
-  override def run(args: List[String]): IO[ExitCode] = {
-    val persistJsonSchema: PersistJsonSchema[IO] = schema => EitherT.rightT(JsonSchemaPersisted(schema.id))
-    val loadJsonSchema: LoadJsonSchema[IO]       = _ => EitherT.rightT(JsonSchema("", "{}"))
+  override def run(args: List[String]): IO[ExitCode] =
     (for {
-      persistSchema <- Resource.make[IO, PersistJsonSchema[IO]](IO(persistJsonSchema))(_ => IO.unit)
-      loadSchema    <- Resource.make[IO, LoadJsonSchema[IO]](IO(loadJsonSchema))(_ => IO.unit)
-      server        <- BlazeServerBuilder[IO]
-                         .withExecutionContext(ec)
-                         .bindHttp(8080, "0.0.0.0")
-                         .withHttpApp(
-                           Logger.httpApp[IO](logHeaders = true, logBody = true)(
-                             Router(
-                               "/" -> Http4sServerInterpreter[IO].toRoutes(
-                                 List(
-                                   schemaPost.serverLogic(schemaPostImplementation(persistSchema, loadSchema)),
-                                   schemaGet.serverLogic(schemaGetImplementation(loadSchema)),
-                                   validate.serverLogic(validateImplementation(loadSchema))
-                                 )
-                               )
-                             ).mapF(_.getOrElse(jsonNotFound))
-                           )
-                         )
-                         .resource
+      redis        <- Redis[IO].utf8("redis://localhost")
+      persistSchema = persistImplementation(redis)
+      loadSchema    = loadImplementation(redis)
+      server       <- BlazeServerBuilder[IO]
+                        .withExecutionContext(ec)
+                        .bindHttp(8080, "0.0.0.0")
+                        .withHttpApp(
+                          Logger.httpApp[IO](logHeaders = true, logBody = true)(
+                            Router(
+                              "/" -> Http4sServerInterpreter[IO].toRoutes(
+                                List(
+                                  schemaPost.serverLogic(schemaPostImplementation(persistSchema, loadSchema)),
+                                  schemaGet.serverLogic(schemaGetImplementation(loadSchema)),
+                                  validate.serverLogic(validateImplementation(loadSchema))
+                                )
+                              )
+                            ).mapF(_.getOrElse(jsonNotFound))
+                          )
+                        )
+                        .resource
     } yield server)
       .use(_ => IO.never)
       .as(ExitCode.Success)
-  }
+
+  private def persistImplementation(redis: RedisCommands[IO, String, String]): PersistJsonSchema[IO] = schema =>
+    EitherT(
+      redis
+        .setNx(schema.id, schema.body)
+        .map(set => if (set) Right(JsonSchemaPersisted(schema.id)) else Left(SchemaAlreadyExists(schema.id)))
+    )
+
+  private def loadImplementation(redis: RedisCommands[IO, String, String]): LoadJsonSchema[IO] = schemaId =>
+    EitherT(redis.get(schemaId).map {
+      case Some(schema) => Right(JsonSchema(schemaId, schema))
+      case None         => Left(SchemaNotFound(schemaId))
+    })
 
   private val jsonNotFound: Response[IO] =
     Response(
