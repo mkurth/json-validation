@@ -13,12 +13,16 @@ import org.http4s.headers.`Content-Type`
 import org.http4s.server.Router
 import org.http4s.server.middleware.Logger
 import sttp.tapir.server.http4s.Http4sServerInterpreter
+import sttp.tapir.swagger.bundle.SwaggerInterpreter
 
 import scala.concurrent.ExecutionContext
 
 object HttpApp extends IOApp {
 
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
+
+  private val swaggerEndpoints =
+    SwaggerInterpreter().fromEndpoints[IO](List(schemaPost, schemaGet, validate), "Json Schema Validation", "1.0")
 
   override def run(args: List[String]): IO[ExitCode] =
     (for {
@@ -36,7 +40,7 @@ object HttpApp extends IOApp {
                                   schemaPost.serverLogic(schemaPostImplementation(persistSchema, loadSchema)),
                                   schemaGet.serverLogic(schemaGetImplementation(loadSchema)),
                                   validate.serverLogic(validateImplementation(loadSchema))
-                                )
+                                ) ++ swaggerEndpoints
                               )
                             ).mapF(_.getOrElse(jsonNotFound))
                           )

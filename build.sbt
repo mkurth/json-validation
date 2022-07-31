@@ -15,12 +15,13 @@ lazy val domain = (project in file("domain"))
 lazy val app = (project in file("app"))
   .settings(
     name                := "json-schema-validator-app",
-    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-http4s-server" % "1.0.3",
-    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-core"          % "1.0.3",
-    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-json-circe"    % "1.0.3",
-    libraryDependencies += "org.http4s"                  %% "http4s-blaze-server" % "0.23.12",
-    libraryDependencies += "dev.profunktor"              %% "redis4cats-effects"  % "1.2.0",
-    libraryDependencies += "ch.qos.logback"               % "logback-classic"     % "1.2.11",
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-http4s-server"     % "1.0.3",
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-core"              % "1.0.3",
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-json-circe"        % "1.0.3",
+    libraryDependencies += "org.http4s"                  %% "http4s-blaze-server"     % "0.23.12",
+    libraryDependencies += "dev.profunktor"              %% "redis4cats-effects"      % "1.2.0",
+    libraryDependencies += "ch.qos.logback"               % "logback-classic"         % "1.2.11",
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % "1.0.3",
     dockerExposedPorts  := List(8080)
   )
   .enablePlugins(JavaAppPackaging)

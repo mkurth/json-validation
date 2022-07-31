@@ -25,9 +25,22 @@ object JsonSchemaValidationApi {
       .out(statusCode(StatusCode.Created).and(jsonBody[SuccessApiResponse]))
       .errorOut(
         oneOf[ErrorApiResponse](
-          oneOfVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[InternalServerErrorResponse])),
-          oneOfVariant(statusCode(StatusCode.Conflict).and(jsonBody[ConflictResponse])),
-          oneOfVariant(statusCode(StatusCode.UnsupportedMediaType).and(jsonBody[UnsupportedMediaTypeResponse]))
+          oneOfVariant(
+            statusCode(StatusCode.InternalServerError)
+              .and(jsonBody[InternalServerErrorResponse].example(InternalServerErrorResponse("uploadSchema", "1")))
+          ),
+          oneOfVariant(
+            statusCode(StatusCode.Conflict)
+              .and(
+                jsonBody[ConflictResponse]
+                  .example(ConflictResponse("uploadSchema", "1", "was created in the meantime"))
+                  .description("this happens if a schema with the same id was already stored")
+              )
+          ),
+          oneOfVariant(
+            statusCode(StatusCode.UnsupportedMediaType)
+              .and(jsonBody[UnsupportedMediaTypeResponse].example(UnsupportedMediaTypeResponse("uploadSchema", "1")))
+          )
         )
       )
 
@@ -38,8 +51,11 @@ object JsonSchemaValidationApi {
       .out(stringBody.and(header(Header.contentType(MediaType.ApplicationJson))))
       .errorOut(
         oneOf[ErrorApiResponse](
-          oneOfVariant(statusCode(StatusCode.NotFound).and(jsonBody[NotFoundResponse])),
-          oneOfVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[InternalServerErrorResponse]))
+          oneOfVariant(statusCode(StatusCode.NotFound).and(jsonBody[NotFoundResponse].example(NotFoundResponse("getSchema", "1")))),
+          oneOfVariant(
+            statusCode(StatusCode.InternalServerError)
+              .and(jsonBody[InternalServerErrorResponse].example(InternalServerErrorResponse("getSchema", "1")))
+          )
         )
       )
 
@@ -48,12 +64,25 @@ object JsonSchemaValidationApi {
       .in("validate")
       .in(path[String]("schemaId"))
       .in(stringBody)
-      .out(jsonBody[SuccessApiResponse])
+      .description("returns a 200 in case the provided json matches the schema")
+      .out(jsonBody[SuccessApiResponse].example(SuccessApiResponse("validate", "1")))
       .errorOut(
         oneOf[ErrorApiResponse](
-          oneOfVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[InternalServerErrorResponse])),
-          oneOfVariant(statusCode(StatusCode.NotFound).and(jsonBody[NotFoundResponse])),
-          oneOfVariant(statusCode(StatusCode.UnsupportedMediaType).and(jsonBody[UnsupportedMediaTypeResponse]))
+          oneOfVariant(
+            statusCode(StatusCode.InternalServerError)
+              .and(jsonBody[InternalServerErrorResponse].example(InternalServerErrorResponse("validate", "1")))
+          ),
+          oneOfVariant(
+            statusCode(StatusCode.NotFound).and(
+              jsonBody[NotFoundResponse]
+                .example(NotFoundResponse("validate", "1"))
+                .description("no schema was found with this id. try uploading it first")
+            )
+          ),
+          oneOfVariant(
+            statusCode(StatusCode.UnsupportedMediaType)
+              .and(jsonBody[UnsupportedMediaTypeResponse].example(UnsupportedMediaTypeResponse("validate", "1")))
+          )
         )
       )
 

@@ -15,6 +15,8 @@ docker-compose up
 
 or ```./run.sh```
 
+[find the API docs here](http://localhost:8080/docs)
+
 ## How to run tests
 
 ```sbt test```
@@ -42,7 +44,6 @@ to cache them locally and only load them once on demand. but again depends on th
 code-wise, that the load will return a SchemaAlreadyExists. this should be split up, so that reading and writing have 
 their own error return types.
 * no metrics or internal logging is implemented
-* no swagger documentation added
 * I would move `/schema` to `/schemas` and `/validate` to `/validations` to make it clearer, we're handling resources 
 here and not use cases
 * JsonSchemaRegistry looks a bit messy with the Try and the staircased EitherT
