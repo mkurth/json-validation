@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  json-schema-validation:
+    image: json-schema-validator-app:0.1.0
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_URL: "redis://redis"
+  redis:
+    image: "redis:alpine"

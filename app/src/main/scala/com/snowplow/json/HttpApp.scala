@@ -22,7 +22,7 @@ object HttpApp extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] =
     (for {
-      redis        <- Redis[IO].utf8("redis://localhost")
+      redis        <- Redis[IO].utf8(sys.env.getOrElse("REDIS_URL", "redis://localhost"))
       persistSchema = persistImplementation(redis)
       loadSchema    = loadImplementation(redis)
       server       <- BlazeServerBuilder[IO]
