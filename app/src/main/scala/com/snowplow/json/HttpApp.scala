@@ -53,38 +53,41 @@ object HttpApp extends IOApp {
   private def validateImplementation(
       loadSchema: LoadJsonSchema[IO]
   ): ((String, String)) => IO[Either[ErrorApiResponse, SuccessApiResponse]] = { case (schemaId, body) =>
+    val action = "validateDocument"
     JsonSchemaValidation.validateJsonSchema(loadSchema)(schemaId, body).value.map {
-      case Left(JsonSchemaValidation.InvalidJson)  => Left(UnsupportedMediaTypeResponse("validateDocument", schemaId))
-      case Left(JsonDoesNotMatchSchema(_, errors)) =>
-        Left(BadRequestResponse("validateDocument", schemaId, errors.mkString("\n")))
-      case Left(SchemaDoesNotExist(_))             => Left(NotFoundResponse("validateDocument", schemaId))
-      case Left(GeneralValidationError(_, _))      => Left(InternalServerErrorResponse("validateDocument", schemaId))
-      case Right(_)                                => Right(SuccessApiResponse("validateDocument", schemaId))
+      case Left(JsonSchemaValidation.InvalidJson)  => Left(UnsupportedMediaTypeResponse(action, schemaId))
+      case Left(JsonDoesNotMatchSchema(_, errors)) => Left(BadRequestResponse(action, schemaId, errors.mkString("\n")))
+      case Left(SchemaDoesNotExist(_))             => Left(NotFoundResponse(action, schemaId))
+      case Left(GeneralValidationError(_, _))      => Left(InternalServerErrorResponse(action, schemaId))
+      case Right(_)                                => Right(SuccessApiResponse(action, schemaId))
     }
   }
 
   private def schemaGetImplementation(
       loadSchema: LoadJsonSchema[IO]
-  ): String => IO[Either[ErrorApiResponse, String]] = schemaId =>
+  ): String => IO[Either[ErrorApiResponse, String]] = schemaId => {
+    val action = "getSchema"
     loadSchema(schemaId).value.map {
-      case Left(SchemaNotFound(_)) => Left(NotFoundResponse("getSchema", schemaId))
-      case Left(_)                 => Left(InternalServerErrorResponse("getSchema", schemaId))
+      case Left(SchemaNotFound(_)) => Left(NotFoundResponse(action, schemaId))
+      case Left(_)                 => Left(InternalServerErrorResponse(action, schemaId))
       case Right(value)            => Right(value.body)
     }
+  }
 
   private def schemaPostImplementation(
       persistSchema: PersistJsonSchema[IO],
       loadSchema: LoadJsonSchema[IO]
   ): ((String, String)) => IO[Either[ErrorApiResponse, SuccessApiResponse]] = { case (schemaId, body) =>
+    val action = "uploadSchema"
     JsonSchemaRegistry
       .registerJsonSchema(persistSchema, loadSchema)(JsonSchema(schemaId, body))
       .value
       .map {
-        case Left(JsonSchemaAlreadyExists(_))     => Left(ConflictResponse("uploadSchema", schemaId))
-        case Left(GeneralRegistrationError(_, _)) => Left(InternalServerErrorResponse("uploadSchema", schemaId))
-        case Left(ConcurrentWritesError(_, _))    => Left(ConflictResponse("uploadSchema", schemaId))
-        case Left(InvalidJson)                    => Left(UnsupportedMediaTypeResponse("uploadSchema", schemaId))
-        case Right(_)                             => Right(SuccessApiResponse("uploadSchema", schemaId))
+        case Left(JsonSchemaAlreadyExists(_))     => Left(ConflictResponse(action, schemaId))
+        case Left(GeneralRegistrationError(_, _)) => Left(InternalServerErrorResponse(action, schemaId))
+        case Left(ConcurrentWritesError(_, _))    => Left(ConflictResponse(action, schemaId))
+        case Left(InvalidJson)                    => Left(UnsupportedMediaTypeResponse(action, schemaId))
+        case Right(_)                             => Right(SuccessApiResponse(action, schemaId))
       }
   }
 
