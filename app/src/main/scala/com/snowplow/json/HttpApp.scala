@@ -9,6 +9,7 @@ import org.http4s.{Headers, MediaType, Response, Status}
 import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.headers.`Content-Type`
 import org.http4s.server.Router
+import org.http4s.server.middleware.Logger
 import sttp.tapir.server.http4s.Http4sServerInterpreter
 
 import scala.concurrent.ExecutionContext
@@ -27,15 +28,17 @@ object HttpApp extends IOApp {
                          .withExecutionContext(ec)
                          .bindHttp(8080, "0.0.0.0")
                          .withHttpApp(
-                           Router(
-                             "/" -> Http4sServerInterpreter[IO].toRoutes(
-                               List(
-                                 schemaPost.serverLogic(schemaPostImplementation(persistSchema, loadSchema)),
-                                 schemaGet.serverLogic(schemaGetImplementation(loadSchema)),
-                                 validate.serverLogic(validateImplementation(loadSchema))
+                           Logger.httpApp[IO](logHeaders = true, logBody = true)(
+                             Router(
+                               "/" -> Http4sServerInterpreter[IO].toRoutes(
+                                 List(
+                                   schemaPost.serverLogic(schemaPostImplementation(persistSchema, loadSchema)),
+                                   schemaGet.serverLogic(schemaGetImplementation(loadSchema)),
+                                   validate.serverLogic(validateImplementation(loadSchema))
+                                 )
                                )
-                             )
-                           ).mapF(_.getOrElse(jsonNotFound))
+                             ).mapF(_.getOrElse(jsonNotFound))
+                           )
                          )
                          .resource
     } yield server)
@@ -83,9 +86,9 @@ object HttpApp extends IOApp {
       .registerJsonSchema(persistSchema, loadSchema)(JsonSchema(schemaId, body))
       .value
       .map {
-        case Left(JsonSchemaAlreadyExists(_))     => Left(ConflictResponse(action, schemaId))
+        case Left(JsonSchemaAlreadyExists(_))     => Left(ConflictResponse(action, schemaId, "already exists"))
         case Left(GeneralRegistrationError(_, _)) => Left(InternalServerErrorResponse(action, schemaId))
-        case Left(ConcurrentWritesError(_, _))    => Left(ConflictResponse(action, schemaId))
+        case Left(ConcurrentWritesError(_, _))    => Left(ConflictResponse(action, schemaId, "was created in the meantime"))
         case Left(InvalidJson)                    => Left(UnsupportedMediaTypeResponse(action, schemaId))
         case Right(_)                             => Right(SuccessApiResponse(action, schemaId))
       }

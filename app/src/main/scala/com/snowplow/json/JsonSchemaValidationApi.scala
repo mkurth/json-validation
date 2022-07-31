@@ -13,7 +13,7 @@ final case class BadRequestResponse(action: String, id: String, message: String,
 final case class InternalServerErrorResponse(action: String, id: String, status: String = "error")         extends ErrorApiResponse
 final case class NotFoundResponse(action: String, id: String, status: String = "error")                    extends ErrorApiResponse
 final case class UnsupportedMediaTypeResponse(action: String, id: String, status: String = "error")        extends ErrorApiResponse
-final case class ConflictResponse(action: String, id: String, status: String = "error")                    extends ErrorApiResponse
+final case class ConflictResponse(action: String, id: String, message: String, status: String = "error")   extends ErrorApiResponse
 
 object JsonSchemaValidationApi {
 
@@ -26,6 +26,7 @@ object JsonSchemaValidationApi {
       .errorOut(
         oneOf[ErrorApiResponse](
           oneOfVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[InternalServerErrorResponse])),
+          oneOfVariant(statusCode(StatusCode.Conflict).and(jsonBody[ConflictResponse])),
           oneOfVariant(statusCode(StatusCode.UnsupportedMediaType).and(jsonBody[UnsupportedMediaTypeResponse]))
         )
       )

@@ -18,7 +18,8 @@ lazy val app = (project in file("app"))
     libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-http4s-server" % "1.0.3",
     libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-core"          % "1.0.3",
     libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-json-circe"    % "1.0.3",
-    libraryDependencies += "org.http4s"                  %% "http4s-blaze-server" % "0.23.12"
+    libraryDependencies += "org.http4s"                  %% "http4s-blaze-server" % "0.23.12",
+    libraryDependencies += "ch.qos.logback"               % "logback-classic"     % "1.2.11"
   )
   .enablePlugins(JavaAppPackaging)
   .dependsOn(domain)
