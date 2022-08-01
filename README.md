@@ -49,4 +49,6 @@ here and not use cases
 * JsonSchemaRegistry looks a bit messy with the Try and the staircased EitherT
 * no real integration tests
 * no separate types for schemaId and the incoming data, should be more typesafe, but I didn't want to spend too much 
-time on that 
+time on that
+* the DB returns an error if the entry was not found. feels wrong, should probably be modeled with an Option or ADT
+* moving to scala 3 could remove some Either and make the whole project slightly more readable
