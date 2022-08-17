@@ -4,6 +4,8 @@ import cats.Id
 import cats.data.EitherT
 import cats.effect.IO
 import com.snowplow.json.JsonSchemaRegistry.*
+import com.snowplow.json.RegistrationError.*
+import com.snowplow.json.PersistenceError.*
 import org.scalatest.GivenWhenThen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

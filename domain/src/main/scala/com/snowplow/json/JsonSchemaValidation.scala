@@ -7,21 +7,18 @@ import com.github.fge.jackson.JsonLoader
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.JsonSchemaFactory
 import com.snowplow.json.JsonSchemaRegistry.*
+import com.snowplow.json.RegistrationError.*
+import com.snowplow.json.PersistenceError.*
+import com.snowplow.json.ValidationError
+import com.snowplow.json.ValidationError.*
 import io.circe.parser.*
 
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.util.Try
 object JsonSchemaValidation {
 
-  sealed trait ValidationError
-  case object InvalidJson                                                   extends ValidationError
-  final case class JsonDoesNotMatchSchema(id: String, errors: List[String]) extends ValidationError
-  final case class GeneralValidationError(id: String, error: String)        extends ValidationError
-  final case class SchemaDoesNotExist(id: String)                           extends ValidationError
-
-  final case class ValidJsonSchema(id: String)
-
   private lazy val validator = JsonSchemaFactory.byDefault().getValidator
+  final case class ValidJsonSchema(id: String)
 
   def validateJsonSchema[F[_]: Monad](
       loadJsonSchema: LoadJsonSchema[F]
@@ -50,9 +47,9 @@ object JsonSchemaValidation {
     )
 
   private def loadAsJson(jsonToValidate: String) =
-    tryOrEither(f = () => JsonLoader.fromString(jsonToValidate), onError = _ => InvalidJson)
+    tryOrEither(f = () => JsonLoader.fromString(jsonToValidate), onError = _ => ValidationError.InvalidJson)
 
-  private def cleanEmptyKeys(json: String) = parse(json).map(_.deepDropNullValues.toString()).left.map(_ => InvalidJson)
+  private def cleanEmptyKeys(json: String) = parse(json).map(_.deepDropNullValues.toString()).left.map(_ => ValidationError.InvalidJson)
 
   private def validateJsonWithSchema(id: String, schema: JsonNode, toValidateAsJson: JsonNode) =
     tryOrEither(

@@ -3,7 +3,10 @@ package com.snowplow.json
 import cats.data.EitherT
 import cats.effect.*
 import com.snowplow.json.JsonSchemaRegistry.*
-import com.snowplow.json.JsonSchemaValidation.{GeneralValidationError, JsonDoesNotMatchSchema, SchemaDoesNotExist}
+import com.snowplow.json.JsonSchemaValidation.*
+import com.snowplow.json.PersistenceError.*
+import com.snowplow.json.RegistrationError.*
+import com.snowplow.json.ValidationError.*
 import com.snowplow.json.JsonSchemaValidationApi.*
 import dev.profunktor.redis4cats.{Redis, RedisCommands}
 import dev.profunktor.redis4cats.effect.Log.Stdout.instance
@@ -75,7 +78,7 @@ object HttpApp extends IOApp {
   ): ((String, String)) => IO[Either[ErrorApiResponse, SuccessApiResponse]] = { case (schemaId, body) =>
     val action = "validateDocument"
     JsonSchemaValidation.validateJsonSchema(loadSchema)(schemaId, body).map {
-      case JsonSchemaValidation.InvalidJson  => Left(UnsupportedMediaTypeResponse(action, schemaId))
+      case ValidationError.InvalidJson       => Left(UnsupportedMediaTypeResponse(action, schemaId))
       case JsonDoesNotMatchSchema(_, errors) =>
         Left(
           BadRequestResponse(
@@ -112,7 +115,7 @@ object HttpApp extends IOApp {
         case JsonSchemaAlreadyExists(_)     => Left(ConflictResponse(action, schemaId, "already exists"))
         case GeneralRegistrationError(_, _) => Left(InternalServerErrorResponse(action, schemaId))
         case ConcurrentWritesError(_, _)    => Left(ConflictResponse(action, schemaId, "was created in the meantime"))
-        case InvalidJson                    => Left(UnsupportedMediaTypeResponse(action, schemaId))
+        case RegistrationError.InvalidJson  => Left(UnsupportedMediaTypeResponse(action, schemaId))
         case _                              => Right(SuccessApiResponse(action, schemaId))
       }
   }

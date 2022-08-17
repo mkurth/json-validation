@@ -2,8 +2,11 @@ package com.snowplow.json
 
 import cats.Id
 import cats.data.EitherT
-import com.snowplow.json.JsonSchemaRegistry.{GeneralPersistenceError, LoadJsonSchema, SchemaNotFound}
-import com.snowplow.json.JsonSchemaValidation.{validateJsonSchema, GeneralValidationError, InvalidJson, SchemaDoesNotExist, ValidJsonSchema}
+import com.snowplow.json.JsonSchemaRegistry.*
+import com.snowplow.json.JsonSchemaValidation.*
+import com.snowplow.json.RegistrationError.*
+import com.snowplow.json.PersistenceError.*
+import com.snowplow.json.ValidationError.*
 import org.scalatest.GivenWhenThen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -75,7 +78,7 @@ class JsonSchemaValidationTest extends AnyFlatSpec with Matchers with GivenWhenT
 
     val result = validateJsonSchema[Id](validJsonRegistry)("anything", "<this> is no </json>")
 
-    result shouldBe InvalidJson
+    result shouldBe ValidationError.InvalidJson
   }
 
   it should "validate json" in {
