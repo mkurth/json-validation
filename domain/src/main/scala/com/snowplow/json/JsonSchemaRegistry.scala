@@ -1,6 +1,7 @@
 package com.snowplow.json
 
 import cats.Monad
+import cats.data.EitherT
 import com.github.fge.jackson.JsonLoader
 
 import scala.util.{Failure, Success, Try}
@@ -30,21 +31,31 @@ object JsonSchemaRegistry {
   def registerJsonSchema[F[_]: Monad](persistJsonSchema: PersistJsonSchema[F], loadJsonSchema: LoadJsonSchema[F])(
       jsonSchema: JsonSchema
   ): F[RegistrationError | JsonSchemaRegistered] =
-    Try(JsonLoader.fromString(jsonSchema.body)) match {
-      case Failure(_) => Monad[F].pure(InvalidJson)
-      case Success(_) =>
-        loadJsonSchema(jsonSchema.id).flatMap {
-          case GeneralPersistenceError(error) => Monad[F].pure(GeneralRegistrationError(jsonSchema.id, error))
-          case SchemaAlreadyExists(id)        => Monad[F].pure(GeneralRegistrationError(id, "schema already exists"))
-          case jsonSchema: JsonSchema         => Monad[F].pure(JsonSchemaAlreadyExists(jsonSchema.id))
-          case SchemaNotFound(_)              =>
-            persistJsonSchema(jsonSchema)
-              .map {
-                case GeneralPersistenceError(error) => GeneralRegistrationError(jsonSchema.id, error)
-                case SchemaAlreadyExists(id)        => ConcurrentWritesError(id, "schema already exists, probably due to concurrent requests")
-                case SchemaNotFound(id)             => JsonSchemaAlreadyExists(id)
-                case JsonSchemaPersisted(id)        => JsonSchemaRegistered(id)
-              }
-        }
-    }
+    (for {
+      _                <- validateJson(jsonSchema)
+      _                <- checkForIdCollision(loadJsonSchema, jsonSchema)
+      schemaRegistered <- persistSchema(persistJsonSchema, jsonSchema)
+    } yield schemaRegistered).value.map(_.merge)
+
+  private def persistSchema[F[_]: Monad](persistJsonSchema: PersistJsonSchema[F], jsonSchema: JsonSchema) =
+    EitherT(persistJsonSchema(jsonSchema).map {
+      case GeneralPersistenceError(error) => Left(GeneralRegistrationError(jsonSchema.id, error))
+      case SchemaAlreadyExists(id)        => Left(ConcurrentWritesError(id, "schema already exists, probably due to concurrent requests"))
+      case SchemaNotFound(id)             => Left(JsonSchemaAlreadyExists(id))
+      case JsonSchemaPersisted(id)        => Right(JsonSchemaRegistered(id))
+    })
+
+  private def checkForIdCollision[F[_]: Monad](loadJsonSchema: LoadJsonSchema[F], jsonSchema: JsonSchema) =
+    EitherT(loadJsonSchema(jsonSchema.id).map {
+      case SchemaNotFound(id)             => Right(id)
+      case GeneralPersistenceError(error) => Left(GeneralRegistrationError(jsonSchema.id, error))
+      case SchemaAlreadyExists(id)        => Left(GeneralRegistrationError(id, "schema already exists"))
+      case jsonSchema: JsonSchema         => Left(JsonSchemaAlreadyExists(jsonSchema.id))
+    })
+
+  private def validateJson[F[_]: Monad](jsonSchema: JsonSchema) =
+    EitherT.fromEither(Try(JsonLoader.fromString(jsonSchema.body)) match
+      case Failure(_)     => Left(InvalidJson)
+      case Success(value) => Right(value)
+    )
 }
