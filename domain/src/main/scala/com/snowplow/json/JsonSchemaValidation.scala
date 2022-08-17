@@ -1,16 +1,16 @@
 package com.snowplow.json
 
 import cats.Monad
-import cats.data.EitherT
+import cats.syntax.functor.toFunctorOps
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jackson.JsonLoader
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.JsonSchemaFactory
-import com.snowplow.json.JsonSchemaRegistry._
-import io.circe.parser._
+import com.snowplow.json.JsonSchemaRegistry.*
+import io.circe.parser.*
+
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.util.Try
-
 object JsonSchemaValidation {
 
   sealed trait ValidationError
@@ -25,21 +25,22 @@ object JsonSchemaValidation {
 
   def validateJsonSchema[F[_]: Monad](
       loadJsonSchema: LoadJsonSchema[F]
-  )(id: String, jsonToValidate: String): EitherT[F, ValidationError, ValidJsonSchema] =
+  )(id: String, jsonToValidate: String): F[ValidationError | ValidJsonSchema] =
     loadJsonSchema(id)
-      .leftMap {
+      .map {
         case GeneralPersistenceError(_) => GeneralValidationError(id, "internal error, try again later")
         case SchemaAlreadyExists(id)    => GeneralValidationError(id, "internal error")
         case SchemaNotFound(id)         => SchemaDoesNotExist(id)
-      }
-      .flatMap { jsonSchema =>
-        EitherT.fromEither(for {
-          schema           <- loadSchemaAsJson(jsonSchema)
-          cleaned          <- cleanEmptyKeys(jsonToValidate)
-          toValidateAsJson <- loadAsJson(cleaned)
-          validationResult <- validateJsonWithSchema(id, schema, toValidateAsJson)
-          result           <- handleValidationResult(id, validationResult)
-        } yield result)
+        case jsonSchema: JsonSchema     =>
+          (for {
+            schema           <- loadSchemaAsJson(jsonSchema)
+            cleaned          <- cleanEmptyKeys(jsonToValidate)
+            toValidateAsJson <- loadAsJson(cleaned)
+            validationResult <- validateJsonWithSchema(id, schema, toValidateAsJson)
+            result           <- handleValidationResult(id, validationResult)
+          } yield result) match
+            case Left(value)  => value
+            case Right(value) => value
       }
 
   private def loadSchemaAsJson(jsonSchema: JsonSchema) =

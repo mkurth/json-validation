@@ -1,10 +1,10 @@
 package com.snowplow.json
 
 import cats.data.EitherT
-import cats.effect._
-import com.snowplow.json.JsonSchemaRegistry._
+import cats.effect.*
+import com.snowplow.json.JsonSchemaRegistry.*
 import com.snowplow.json.JsonSchemaValidation.{GeneralValidationError, JsonDoesNotMatchSchema, SchemaDoesNotExist}
-import com.snowplow.json.JsonSchemaValidationApi._
+import com.snowplow.json.JsonSchemaValidationApi.*
 import dev.profunktor.redis4cats.{Redis, RedisCommands}
 import dev.profunktor.redis4cats.effect.Log.Stdout.instance
 import io.circe.parser
@@ -13,6 +13,7 @@ import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.headers.`Content-Type`
 import org.http4s.server.Router
 import org.http4s.server.middleware.Logger
+import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.http4s.Http4sServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 
@@ -36,11 +37,11 @@ object HttpApp extends IOApp {
                         .withHttpApp(
                           Logger.httpApp[IO](logHeaders = true, logBody = true)(
                             Router(
-                              "/" -> Http4sServerInterpreter[IO].toRoutes(
+                              "/" -> Http4sServerInterpreter[IO]().toRoutes(
                                 List(
-                                  schemaPost.serverLogic(schemaPostImplementation(persistSchema, loadSchema)),
-                                  schemaGet.serverLogic(schemaGetImplementation(loadSchema)),
-                                  validate.serverLogic(validateImplementation(loadSchema))
+                                  schemaPost.serverLogic[IO](schemaPostImplementation(persistSchema, loadSchema)),
+                                  schemaGet.serverLogic[IO](schemaGetImplementation(loadSchema)),
+                                  validate.serverLogic[IO](validateImplementation(loadSchema))
                                 ) ++ swaggerEndpoints
                               )
                             ).mapF(_.getOrElse(jsonNotFound))
@@ -52,17 +53,15 @@ object HttpApp extends IOApp {
       .as(ExitCode.Success)
 
   private def persistImplementation(redis: RedisCommands[IO, String, String]): PersistJsonSchema[IO] = schema =>
-    EitherT(
-      redis
-        .setNx(schema.id, schema.body)
-        .map(set => if (set) Right(JsonSchemaPersisted(schema.id)) else Left(SchemaAlreadyExists(schema.id)))
-    )
+    redis
+      .setNx(schema.id, schema.body)
+      .map(set => if (set) JsonSchemaPersisted(schema.id) else SchemaAlreadyExists(schema.id))
 
   private def loadImplementation(redis: RedisCommands[IO, String, String]): LoadJsonSchema[IO] = schemaId =>
-    EitherT(redis.get(schemaId).map {
-      case Some(schema) => Right(JsonSchema(schemaId, schema))
-      case None         => Left(SchemaNotFound(schemaId))
-    })
+    redis.get(schemaId).map {
+      case Some(schema) => JsonSchema(schemaId, schema)
+      case None         => SchemaNotFound(schemaId)
+    }
 
   private val jsonNotFound: Response[IO] =
     Response(
@@ -75,9 +74,9 @@ object HttpApp extends IOApp {
       loadSchema: LoadJsonSchema[IO]
   ): ((String, String)) => IO[Either[ErrorApiResponse, SuccessApiResponse]] = { case (schemaId, body) =>
     val action = "validateDocument"
-    JsonSchemaValidation.validateJsonSchema(loadSchema)(schemaId, body).value.map {
-      case Left(JsonSchemaValidation.InvalidJson)  => Left(UnsupportedMediaTypeResponse(action, schemaId))
-      case Left(JsonDoesNotMatchSchema(_, errors)) =>
+    JsonSchemaValidation.validateJsonSchema(loadSchema)(schemaId, body).map {
+      case JsonSchemaValidation.InvalidJson  => Left(UnsupportedMediaTypeResponse(action, schemaId))
+      case JsonDoesNotMatchSchema(_, errors) =>
         Left(
           BadRequestResponse(
             action,
@@ -85,9 +84,9 @@ object HttpApp extends IOApp {
             errors.map(parser.parse).collect { case Right(value) => value }
           )
         )
-      case Left(SchemaDoesNotExist(_))             => Left(NotFoundResponse(action, schemaId))
-      case Left(GeneralValidationError(_, _))      => Left(InternalServerErrorResponse(action, schemaId))
-      case Right(_)                                => Right(SuccessApiResponse(action, schemaId))
+      case SchemaDoesNotExist(_)             => Left(NotFoundResponse(action, schemaId))
+      case GeneralValidationError(_, _)      => Left(InternalServerErrorResponse(action, schemaId))
+      case _                                 => Right(SuccessApiResponse(action, schemaId))
     }
   }
 
@@ -95,10 +94,10 @@ object HttpApp extends IOApp {
       loadSchema: LoadJsonSchema[IO]
   ): String => IO[Either[ErrorApiResponse, String]] = schemaId => {
     val action = "getSchema"
-    loadSchema(schemaId).value.map {
-      case Left(SchemaNotFound(_)) => Left(NotFoundResponse(action, schemaId))
-      case Left(_)                 => Left(InternalServerErrorResponse(action, schemaId))
-      case Right(value)            => Right(value.body)
+    loadSchema(schemaId).map {
+      case SchemaNotFound(_)   => Left(NotFoundResponse(action, schemaId))
+      case JsonSchema(_, body) => Right(body)
+      case _                   => Left(InternalServerErrorResponse(action, schemaId))
     }
   }
 
@@ -109,13 +108,12 @@ object HttpApp extends IOApp {
     val action = "uploadSchema"
     JsonSchemaRegistry
       .registerJsonSchema(persistSchema, loadSchema)(JsonSchema(schemaId, body))
-      .value
       .map {
-        case Left(JsonSchemaAlreadyExists(_))     => Left(ConflictResponse(action, schemaId, "already exists"))
-        case Left(GeneralRegistrationError(_, _)) => Left(InternalServerErrorResponse(action, schemaId))
-        case Left(ConcurrentWritesError(_, _))    => Left(ConflictResponse(action, schemaId, "was created in the meantime"))
-        case Left(InvalidJson)                    => Left(UnsupportedMediaTypeResponse(action, schemaId))
-        case Right(_)                             => Right(SuccessApiResponse(action, schemaId))
+        case JsonSchemaAlreadyExists(_)     => Left(ConflictResponse(action, schemaId, "already exists"))
+        case GeneralRegistrationError(_, _) => Left(InternalServerErrorResponse(action, schemaId))
+        case ConcurrentWritesError(_, _)    => Left(ConflictResponse(action, schemaId, "was created in the meantime"))
+        case InvalidJson                    => Left(UnsupportedMediaTypeResponse(action, schemaId))
+        case _                              => Right(SuccessApiResponse(action, schemaId))
       }
   }
 
